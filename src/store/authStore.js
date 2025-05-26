@@ -55,13 +55,22 @@ const useAuthStore = create((set) => ({
     }
   },
   
-  register: async (email, password) => {
+  register: async (email, password, userData = {}) => {
     try {
       set({ loading: true, error: null });
       
       const { data, error } = await supabase.auth.signUp({
         email,
-        password
+        password,
+        options: {
+          data: {
+            full_name: userData.full_name || '',
+            student_code: userData.student_code || '',
+            semester: userData.semester || '',
+            user_type: 'student',
+            is_admin: false
+          }
+        }
       });
       
       if (error) throw error;

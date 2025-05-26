@@ -17,15 +17,16 @@ export default function Navbar() {
     <nav className="navbar">
       <div className="navbar-container">
         <div className="navbar-logo">
-          <Link to="/">Trackademic</Link>
+          <Link to="/">Trackademic 👨‍🎓</Link>
         </div>
         <div className="navbar-links">
           {user ? (
             <>
-              <Link to="/" className="nav-link">Home</Link>
-              <Link to="/courses" className="nav-link">Courses</Link>
+              <Link to="/" className="nav-link">Dashboard</Link>
+              <Link to="/evaluation-plans" className="nav-link">Evaluation Plans</Link>
+              <Link to="/my-grades" className="nav-link">My Grades</Link>
+              <Link to="/semester-report" className="nav-link">Semester Report</Link>
               <button onClick={handleLogout} className="nav-link logout-btn">Logout</button>
-              <span className="user-email">{user.email}</span>
             </>
           ) : (
             !loading && (

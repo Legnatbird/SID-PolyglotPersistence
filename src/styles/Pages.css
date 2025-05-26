@@ -1,0 +1,146 @@
+.page-container {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.breadcrumbs {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.breadcrumbs span {
+  display: inline-block;
+  margin: 0 0.25rem;
+}
+
+.breadcrumbs span:not(.current) {
+  cursor: pointer;
+  color: #646cff;
+}
+
+.breadcrumbs span:not(.current):hover {
+  text-decoration: underline;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  font-size: 1.2rem;
+  color: #999;
+}
+
+.error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  font-size: 1.2rem;
+  color: #ff6b6b;
+  text-align: center;
+  padding: 0 2rem;
+}
+
+.section-container {
+  margin-bottom: 2rem;
+}
+
+.detail-card {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.detail-card h2 {
+  margin-top: 0;
+  color: #fff;
+  border-bottom: 1px solid #444;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.detail-item {
+  margin-bottom: 1rem;
+}
+
+.detail-label {
+  display: block;
+  font-size: 0.9rem;
+  color: #999;
+  margin-bottom: 0.25rem;
+}
+
+.detail-value {
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.debug-controls {
+  background-color: #333;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.debug-button {
+  background-color: #444;
+  color: #fff;
+  border: 1px solid #666;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.debug-button:hover {
+  background-color: #555;
+}
+
+.debug-info {
+  color: #999;
+  font-size: 0.8rem;
+}
+
+.debug-data {
+  background-color: #333;
+  padding: 1rem;
+  border-radius: 4px;
+  margin: 1rem 0;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.debug-data pre {
+  color: #fff;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 768px) {
+  .page-container {
+    padding: 1rem;
+  }
+}
