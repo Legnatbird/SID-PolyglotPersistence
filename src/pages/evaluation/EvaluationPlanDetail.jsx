@@ -231,7 +231,7 @@ export default function EvaluationPlanDetail() {
         
         <div className="detail-item">
           <span className="detail-label">Course:</span>
-          <span className="detail-value">{course?.title || 'Unknown Course'}</span>
+          <span className="detail-value">{course?.subject_name || 'Unknown Course'}</span>
         </div>
         
         <div className="detail-item">
@@ -242,7 +242,7 @@ export default function EvaluationPlanDetail() {
         <div className="detail-item">
           <span className="detail-label">Created By:</span>
           <span className="detail-value">
-            {plan?.created_by === user.id ? 'You' : 'Another Student'}
+            {plan?.created_by === user.user_metadata.student_code ? 'You' : 'Another Student'}
           </span>
         </div>
         

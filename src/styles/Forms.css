@@ -486,6 +486,18 @@
 
 .overall-average h2 span {
   font-size: 1.2em;
+  display: inline-block;
+  min-width: 50px;
+}
+
+.grade-status {
+  min-width: 80px;
+  text-align: center;
+}
+
+.not-available {
+  color: #999;
+  font-style: italic;
 }
 
 .report-actions {

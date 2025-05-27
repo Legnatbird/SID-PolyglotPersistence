@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   getStudentGradesBySemester,
   getStudentCoursesByStudent,
   getCourseById,
-  resetAndReseedDemoData
+  resetAndReseedDemoData,
+  getEvaluationPlansByCourse
 } from '../../services/dataService';
 import useAuthStore from '../../store/authStore';
 import '../../styles/Pages.css';
@@ -19,35 +20,250 @@ export default function SemesterReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [semesterGrades, setSemesterGrades] = useState([]);
-  const [courseDetails, setCourseDetails] = useState({});
   const [overallAverage, setOverallAverage] = useState(null);
   const [debugInfo, setDebugInfo] = useState({});
   
-  const handleResetData = () => {
+  // Cache for API requests
+  const requestCacheRef = useRef({});
+  
+  // Memoized API request function with caching
+  const cachedRequest = useCallback(async (key, requestFn) => {
+    if (requestCacheRef.current[key]) {
+      return requestCacheRef.current[key];
+    }
+    
+    try {
+      const result = await requestFn();
+      requestCacheRef.current[key] = result;
+      return result;
+    } catch (error) {
+      console.error(`Error in cached request ${key}:`, error);
+      throw error;
+    }
+  }, []);
+  
+  const handleResetData = useCallback(() => {
     try {
       resetAndReseedDemoData();
+      // Clear cache on data reset
+      requestCacheRef.current = {};
       window.location.reload();
     } catch (err) {
       console.error('Error resetting data:', err);
       setError('Failed to reset data: ' + err.message);
     }
-  };
+  }, []);
+  
+  // Single fetch function to get all course details and evaluation plans at once
+  const fetchCourseDetailsAndPlans = useCallback(async (courses, semester) => {
+    const courseDetailsMap = {};
+    const evaluationPlansMap = {};
+    
+    // Create batches of promises to avoid too many concurrent requests
+    const batchSize = 5;
+    let promises = [];
+    
+    for (let i = 0; i < courses.length; i++) {
+      const course = courses[i];
+      
+      // Add course details promise
+      const detailsKey = `course-${course.subject_code}`;
+      promises.push(
+        cachedRequest(detailsKey, () => getCourseById(course.subject_code))
+          .then(details => {
+            courseDetailsMap[course.subject_code] = details;
+          })
+      );
+      
+      // Add evaluation plans promise
+      const plansKey = `plans-${course.subject_code}-${semester}`;
+      promises.push(
+        cachedRequest(plansKey, () => getEvaluationPlansByCourse(course.subject_code, semester))
+          .then(plans => {
+            if (plans && plans.length > 0) {
+              const latestPlan = plans.sort((a, b) => 
+                new Date(b.updated_at) - new Date(a.updated_at)
+              )[0];
+              evaluationPlansMap[course.subject_code] = latestPlan;
+            }
+          })
+      );
+      
+      // Process in batches to avoid overwhelming the browser
+      if (promises.length >= batchSize || i === courses.length - 1) {
+        await Promise.all(promises);
+        promises = [];
+      }
+    }
+    
+    return { courseDetailsMap, evaluationPlansMap };
+  }, [cachedRequest]);
+  
+  // Process grades with evaluation plans
+  const processGrades = useCallback((courses, gradesData, courseDetailsMap, evaluationPlansMap) => {
+    // Initialize course grades objects
+    const courseGrades = {};
+    courses.forEach(course => {
+      courseGrades[course.subject_code] = {
+        courseId: course.subject_code,
+        courseName: courseDetailsMap[course.subject_code]?.title || course.subject_name || 'Unknown Course',
+        grades: [],
+        finalGrade: 0,
+        totalPercentage: 0,
+        evaluationPlan: evaluationPlansMap[course.subject_code] || null
+      };
+    });
+    
+    // Initialize valid grades counter for average calculation
+    let validGradeSum = 0;
+    let validGradeCount = 0;
+
+    // Process grade data
+    if (Array.isArray(gradesData)) {
+      // Handle individual grade entries
+      gradesData.forEach(grade => {
+        const courseId = grade.subject_code;
+        if (courseGrades[courseId]) {
+          courseGrades[courseId].grades.push(grade);
+        }
+      });
+      
+      // Calculate grades for each course with its evaluation plan
+      Object.values(courseGrades).forEach(course => {
+        if (course.evaluationPlan && course.evaluationPlan.activities) {
+          let weightedSum = 0;
+          let totalPercentageWithGrades = 0;
+          const totalPlanPercentage = course.evaluationPlan.activities.reduce(
+            (sum, activity) => sum + parseFloat(activity.percentage || 0), 0
+          );
+          
+          course.evaluationPlan.activities.forEach(activity => {
+            const activityId = activity._id;
+            
+            const grade = course.grades[0]?.grades.find(g => {
+              const matches = g.activity_id === activityId;
+              return matches;
+            });
+            
+            if (grade) {
+              const gradeValue = parseFloat(grade.grade);
+              const percentage = parseFloat(activity.percentage || 0);
+              
+              if (!isNaN(gradeValue) && !isNaN(percentage)) {
+                weightedSum += gradeValue * (percentage / 100);
+                totalPercentageWithGrades += percentage;
+              }
+            }
+          });
+          
+          // Set the calculated values
+          course.finalGrade = totalPercentageWithGrades > 0 ? 
+            weightedSum : 0;
+          
+          // Calculate percentage completion based on the total possible percentage
+          course.totalPercentage = totalPlanPercentage > 0 ?
+            Math.min((totalPercentageWithGrades / totalPlanPercentage) * 100, 100) : 0;
+          
+          // Add to overall average if we have a grade
+          if (course.finalGrade > 0) {
+            validGradeSum += course.finalGrade;
+            validGradeCount++;
+          }
+        }
+      });
+    } else if (typeof gradesData === 'object' && gradesData !== null) {
+      // Handle course-level grade objects - assume it's an array of objects or a single object
+      const gradesArray = Array.isArray(gradesData) ? gradesData : [gradesData];
+      
+      gradesArray.forEach(gradeObj => {
+        const courseId = gradeObj.subject_code;
+        
+        if (courseGrades[courseId]) {
+          // If we have a calculated grade, use it directly
+          if (gradeObj.calculated_grade !== undefined) {
+            const finalGrade = parseFloat(gradeObj.calculated_grade);
+            courseGrades[courseId].finalGrade = finalGrade;
+            
+            // Store the grades for reference
+            if (gradeObj.grades && Array.isArray(gradeObj.grades)) {
+              courseGrades[courseId].grades = gradeObj.grades;
+            }
+            
+            // Use actual completion percentage if available
+            if (courseGrades[courseId].evaluationPlan && courseGrades[courseId].evaluationPlan.activities) {
+              // Calculate completion based on how many activities have grades
+              const totalActivities = courseGrades[courseId].evaluationPlan.activities.length;
+              let gradedActivitiesCount = 0;
+              let totalGradedPercentage = 0;
+              
+              // Count activities with grades
+              if (gradeObj.grades && Array.isArray(gradeObj.grades)) {
+                courseGrades[courseId].evaluationPlan.activities.forEach(activity => {
+                  const activityId = activity._id || activity.id;
+                  const hasGrade = gradeObj.grades.some(g => g.activity_id === activityId);
+                  
+                  if (hasGrade) {
+                    gradedActivitiesCount++;
+                    totalGradedPercentage += parseFloat(activity.percentage || 0);
+                  }
+                });
+                
+                // Calculate percentage based on the percentage value of graded activities
+                const totalPlanPercentage = courseGrades[courseId].evaluationPlan.activities.reduce(
+                  (sum, activity) => sum + parseFloat(activity.percentage || 0), 0
+                );
+                
+                courseGrades[courseId].totalPercentage = totalPlanPercentage > 0 ?
+                  (totalGradedPercentage / totalPlanPercentage) * 100 : 0;
+              } else {
+                // If no detailed grades, estimate from activity count
+                courseGrades[courseId].totalPercentage = totalActivities > 0 ?
+                  (gradedActivitiesCount / totalActivities) * 100 : 0;
+              }
+            } else {
+              courseGrades[courseId].totalPercentage = 100; // Default to 100% if no evaluation plan
+            }
+            
+            // Add to valid grades for average calculation
+            if (!isNaN(finalGrade)) {
+              validGradeSum += finalGrade;
+              validGradeCount++;
+            }
+          }
+        }
+      });
+    }
+
+    const overallAvg = validGradeCount > 0 ? validGradeSum / validGradeCount : null;
+    
+    return { courseGrades: Object.values(courseGrades), overallAverage: overallAvg };
+  }, []);
   
   useEffect(() => {
+    if (!user || !studentCode) {
+      setLoading(false);
+      setSemesterGrades([]);
+      setOverallAverage(null);
+      return;
+    }
+    
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
+    
+    setSemesterGrades([]);
+    setOverallAverage(null);
+    
     async function fetchSemesterData() {
-      if (!user || !studentCode) {
-        setLoading(false);
-        return;
-      }
-      
       try {
-        setLoading(true);
-        setError(null);
+        const coursesKey = `courses-${studentCode}-${selectedSemester}`;
+        const gradesKey = `grades-${studentCode}-${selectedSemester}`;
         
-        console.log(`Fetching data for student ${studentCode} and semester ${selectedSemester}`);
+        const courses = await cachedRequest(coursesKey, () => 
+          getStudentCoursesByStudent(studentCode, selectedSemester)
+        );
         
-        const courses = await getStudentCoursesByStudent(studentCode, selectedSemester);
-        console.log("Found courses:", courses);
+        if (!isMounted) return;
         
         setDebugInfo(prev => ({
           ...prev,
@@ -58,13 +274,17 @@ export default function SemesterReport() {
         }));
         
         if (courses.length === 0) {
-          console.log("No courses found for this student and semester");
+          setSemesterGrades([]);
+          setOverallAverage(null);
           setLoading(false);
           return;
         }
+
+        const gradesData = await cachedRequest(gradesKey, () => 
+          getStudentGradesBySemester(studentCode, selectedSemester)
+        );
         
-        const gradesData = await getStudentGradesBySemester(studentCode, selectedSemester);
-        console.log("Found grades:", gradesData);
+        if (!isMounted) return;
         
         setDebugInfo(prev => ({
           ...prev,
@@ -72,84 +292,42 @@ export default function SemesterReport() {
           grades: gradesData
         }));
         
-        const courseDetailsMap = {};
-        await Promise.all(courses.map(async (course) => {
-          const details = await getCourseById(course.subject_code);
-          courseDetailsMap[course.subject_code] = details;
-        }));
+        const { courseDetailsMap, evaluationPlansMap } = await fetchCourseDetailsAndPlans(courses, selectedSemester);
         
-        setCourseDetails(courseDetailsMap);
-        
-        const courseGrades = {};
-        courses.forEach(course => {
-          courseGrades[course.subject_code] = {
-            courseId: course.subject_code,
-            courseName: courseDetailsMap[course.subject_code]?.title || course.subject_name || 'Unknown Course',
-            grades: [],
-            finalGrade: 0,
-            totalPercentage: 0
-          };
-        });
+        if (!isMounted) return;
 
-        if (Array.isArray(gradesData)) {
-          gradesData.forEach(grade => {
-            if (courseGrades[grade.subject_code]) {
-              courseGrades[grade.subject_code].grades.push(grade);
-            }
-          });
-          
-          Object.values(courseGrades).forEach(course => {
-            let weightedSum = 0;
-            let totalPercentage = 0;
-            
-            course.grades.forEach(grade => {
-              const weight = parseFloat(grade.activity_percentage || 0) / 100;
-              weightedSum += parseFloat(grade.grade) * weight;
-              totalPercentage += parseFloat(grade.activity_percentage || 0);
-            });
-            
-            course.finalGrade = weightedSum;
-            course.totalPercentage = totalPercentage;
-          });
-        } else {
-          gradesData.forEach(gradeObj => {
-            if (courseGrades[gradeObj.subject_code]) {
-              courseGrades[gradeObj.subject_code].finalGrade = parseFloat(gradeObj.calculated_grade);
-              courseGrades[gradeObj.subject_code].totalPercentage = 100; // Assume 100% if we have calculated grade
-              
-              if (gradeObj.grades && Array.isArray(gradeObj.grades)) {
-                courseGrades[gradeObj.subject_code].grades = gradeObj.grades;
-              }
-            }
-          });
-        }
-
-        const coursesWithGrades = Object.values(courseGrades).filter(
-          course => course.finalGrade > 0 || course.grades.length > 0
+        const { courseGrades, overallAverage } = processGrades(
+          courses, 
+          gradesData, 
+          courseDetailsMap, 
+          evaluationPlansMap
         );
         
-        if (coursesWithGrades.length > 0) {
-          const sum = coursesWithGrades.reduce(
-            (total, course) => total + course.finalGrade, 
-            0
-          );
-          setOverallAverage(sum / coursesWithGrades.length);
-        } else {
-          setOverallAverage(null);
-        }
+        if (!isMounted) return;
         
-        setSemesterGrades(Object.values(courseGrades));
+        setSemesterGrades(courseGrades);
+        setOverallAverage(overallAverage);
         
       } catch (err) {
-        console.error('Error fetching semester data:', err);
-        setError(err.message);
+        if (isMounted) {
+          console.error('Error fetching semester data:', err);
+          setError(err.message);
+          setSemesterGrades([]);
+          setOverallAverage(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     }
     
     fetchSemesterData();
-  }, [user, selectedSemester, studentCode]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, selectedSemester, studentCode, cachedRequest, fetchCourseDetailsAndPlans, processGrades]);
   
   const semesters = ['2023-1', '2023-2', '2024-1', '2024-2'];
   
@@ -201,12 +379,14 @@ export default function SemesterReport() {
             <div className="semester-report">
               {overallAverage !== null && (
                 <div className="overall-average">
-                  <h2>Semester Average: <span>{overallAverage.toFixed(2)}</span></h2>
+                  <h2>Semester Average: <span>{isNaN(overallAverage) ? "N/A" : overallAverage.toFixed(2)}</span></h2>
                   <div className="grade-status">
-                    {overallAverage >= 3.0 ? (
-                      <span className="passing">Passing</span>
-                    ) : (
-                      <span className="failing">Failing</span>
+                    {!isNaN(overallAverage) && (
+                      overallAverage >= 3.0 ? (
+                        <span className="passing">Passing</span>
+                      ) : (
+                        <span className="failing">Failing</span>
+                      )
                     )}
                   </div>
                 </div>
@@ -251,23 +431,25 @@ export default function SemesterReport() {
                       {semesterGrades.map(course => (
                         <tr key={course.courseId}>
                           <td>{course.courseName}</td>
-                          <td className={course.finalGrade >= 3.0 ? 'passing' : 'failing'}>
-                            {course.finalGrade.toFixed(2)}
+                          <td className={!isNaN(course.finalGrade) && course.finalGrade >= 3.0 ? 'passing' : 'failing'}>
+                            {isNaN(course.finalGrade) ? "N/A" : course.finalGrade.toFixed(2)}
                           </td>
                           <td>
                             <div className="completion-bar">
                               <div 
                                 className="completion-fill" 
-                                style={{ width: `${course.totalPercentage}%` }}
+                                style={{ width: `${Math.min(course.totalPercentage || 0, 100)}%` }}
                               ></div>
                             </div>
-                            <span>{course.totalPercentage}%</span>
+                            <span>{isNaN(course.totalPercentage) ? "0" : Math.round(course.totalPercentage)}%</span>
                           </td>
                           <td>
-                            {course.finalGrade >= 3.0 ? (
-                              <span className="status passing">Passing</span>
-                            ) : (
-                              <span className="status failing">Failing</span>
+                            {!isNaN(course.finalGrade) && (
+                              course.finalGrade >= 3.0 ? (
+                                <span className="status passing">Passing</span>
+                              ) : (
+                                <span className="status failing">Failing</span>
+                              )
                             )}
                           </td>
                           <td>

@@ -30,12 +30,11 @@ export default function EvaluationPlans() {
         
         const plansData = await getEvaluationPlans(query);
         
-        // Enrich plans with course names
         const enrichedPlans = plansData.map(plan => {
           const course = coursesData.find(c => c._id === plan.subject_code);
           return {
             ...plan,
-            course_name: course ? course.title : 'Unknown Course'
+            course_name: course ? course.subject_name : 'Unknown Course'
           };
         });
         

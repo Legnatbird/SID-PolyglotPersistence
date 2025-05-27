@@ -8,7 +8,6 @@ import Dashboard from './pages/Dashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import useAuthStore from './store/authStore';
 
-// Evaluation system pages
 import EvaluationPlans from './pages/evaluation/EvaluationPlans';
 import EvaluationPlanDetail from './pages/evaluation/EvaluationPlanDetail';
 import MyGrades from './pages/evaluation/MyGrades';
@@ -18,7 +17,6 @@ function App() {
   const { initialize } = useAuthStore();
   
   useEffect(() => {
-    // Initialize auth only
     initialize();
   }, [initialize]);
   

@@ -5,7 +5,6 @@ import {
   getEvaluationPlansByCourse,
   getStudentGradesByPlan,
   getCourseById,
-  calculateFinalGrade,
   createStudentGrade,
   updateStudentGrade
 } from '../../services/dataService';
@@ -213,16 +212,25 @@ export default function MyGrades() {
       return null;
     }
     
+    console.log("Calculating grade from activities:", { 
+      evaluationPlan, 
+      studentGrades 
+    });
+    
     let totalGradePoints = 0;
     let totalPercentageWithGrades = 0;
+    const totalPlanPercentage = evaluationPlan.activities.reduce(
+      (sum, activity) => sum + parseFloat(activity.percentage || 0), 0
+    );
     
     evaluationPlan.activities.forEach(activity => {
-      const existingGrade = studentGrades.find(g => 
-        g.activity_id === activity._id || 
-        g.activity_id === activity.id
-      );
+      const activityId = activity._id || activity.id;
+      console.log(`Looking for grade for activity ${activityId} (${activity.name})`);
+      
+      const existingGrade = studentGrades.find(g => g.activity_id === activityId);
       
       if (existingGrade) {
+        console.log(`Found grade for ${activity.name}:`, existingGrade);
         const grade = parseFloat(existingGrade.grade);
         const percentage = parseFloat(activity.percentage);
         
@@ -230,12 +238,26 @@ export default function MyGrades() {
           totalGradePoints += (grade * percentage) / 100;
           totalPercentageWithGrades += percentage;
         }
+      } else {
+        console.log(`No grade found for activity ${activityId} (${activity.name})`);
       }
     });
     
+    const finalGrade = totalPercentageWithGrades > 0 ? totalGradePoints : 0;
+    const completionPercentage = totalPlanPercentage > 0 ?
+      (totalPercentageWithGrades / totalPlanPercentage) * 100 : 0;
+    
+    console.log("Final calculation:", {
+      finalGrade,
+      completionPercentage,
+      totalGradePoints,
+      totalPercentageWithGrades,
+      totalPlanPercentage
+    });
+    
     return {
-      currentGrade: totalGradePoints,
-      completedPercentage: totalPercentageWithGrades
+      currentGrade: finalGrade,
+      completedPercentage: completionPercentage
     };
   };
 
