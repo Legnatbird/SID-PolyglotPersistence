@@ -152,6 +152,8 @@ export default function MyGrades() {
       
       const existingGrade = studentGrades.find(g => g.activity_id === activity._id);
       
+      console.log('Saving grade:', { gradeValue, activity, existingGrade });
+      
       if (existingGrade) {
         const gradeId = existingGrade._id || existingGrade.id;
         
@@ -175,33 +177,48 @@ export default function MyGrades() {
           submitted_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
-        
       }
       
+      console.log('Grade saved, fetching updated data...');
+      
+      // Refetch the grades data to ensure we have the latest information
       const updatedGradesData = await getStudentGradesByPlan(evaluationPlan._id, studentCode);
+      
+      console.log('Updated grades data from server:', updatedGradesData);
       
       let updatedGradesArray = [];
       
-      if (updatedGradesData && Array.isArray(updatedGradesData.grades)) {
+      // Better handling of the response format
+      if (Array.isArray(updatedGradesData)) {
+        updatedGradesArray = updatedGradesData;
+      } else if (updatedGradesData && Array.isArray(updatedGradesData.grades)) {
         updatedGradesArray = updatedGradesData.grades;
-      } else if (Array.isArray(updatedGradesData)) {
-        if (updatedGradesData.length > 0 && updatedGradesData[0].grades) {
-          updatedGradesArray = updatedGradesData[0].grades;
-        } else {
-          updatedGradesArray = updatedGradesData;
-        }
+      } else if (updatedGradesData && updatedGradesData.length > 0 && updatedGradesData[0].grades) {
+        updatedGradesArray = updatedGradesData[0].grades;
       } else {
         console.warn('Unexpected grade data format:', updatedGradesData);
         updatedGradesArray = [];
       }
       
+      console.log('Processed updated grades array:', updatedGradesArray);
+      
+      // Update the state with the fresh data
       setStudentGrades(updatedGradesArray);
 
+      // Update the gradeUpdates state to reflect the saved grade
       const newUpdates = { ...gradeUpdates };
-      newUpdates[activity._id] = gradeValue.toString();
+      evaluationPlan.activities.forEach(act => {
+        const grade = updatedGradesArray.find(g => g.activity_id === act._id);
+        newUpdates[act._id] = grade ? grade.grade.toString() : '';
+      });
+      
+      console.log('New grade updates state:', newUpdates);
       setGradeUpdates(newUpdates);
       
       setError(null);
+      
+      // Show success message
+      console.log('Grade saved successfully');
       
     } catch (err) {
       console.error('Error saving grade:', err);

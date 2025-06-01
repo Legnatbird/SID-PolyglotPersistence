@@ -347,9 +347,8 @@ def get_student_grades():
         if "subject_code" in grade:
             course = db.student_courses.find_one({"subject_code": grade["subject_code"]})
             if course:
-                grade["subject_name"] = course["subject_name"]
-            else:
-                grade["subject_name"] = "Unknown Course"
+                grade["subject_name"] = course.get("subject_name", "Unknown Course")
+    
     return jsonify(grades)
 
 @app.route('/api/student-grades/<grade_id>', methods=['GET'])
@@ -362,22 +361,17 @@ def get_student_grade(grade_id):
 @app.route('/api/student-grades', methods=['POST'])
 def create_student_grade():
     grade_data = request.json
+    
+    if "evaluation_plan_id" in grade_data:
+        try:
+            if ObjectId.is_valid(grade_data["evaluation_plan_id"]):
+                grade_data["evaluation_plan_id"] = ObjectId(grade_data["evaluation_plan_id"])
+        except:
+            pass
+    
     grade_data["created_at"] = datetime.now()
-    
-    student_id = grade_data.get("student_id")
-    subject_code = grade_data.get("subject_code")
-    semester = grade_data.get("semester")
-    
-    if student_id and subject_code and semester:
-        student_course = db.student_courses.find_one({
-            "student_id": student_id,
-            "subject_code": subject_code,
-            "semester": semester
-        })
-        
-        if student_course:
-            grade_data["professor_id"] = student_course.get("professor_id")
-            grade_data["professor_name"] = student_course.get("professor_name")
+    if "updated_at" not in grade_data:
+        grade_data["updated_at"] = datetime.now()
     
     result = db.student_grades.insert_one(grade_data)
     created_grade = db.student_grades.find_one({"_id": result.inserted_id})
@@ -386,18 +380,29 @@ def create_student_grade():
 @app.route('/api/student-grades/<grade_id>', methods=['PUT'])
 def update_student_grade(grade_id):
     grade_data = request.json
+    grade_data["updated_at"] = datetime.now()
+    
+    if "evaluation_plan_id" in grade_data:
+        try:
+            if ObjectId.is_valid(grade_data["evaluation_plan_id"]):
+                grade_data["evaluation_plan_id"] = ObjectId(grade_data["evaluation_plan_id"])
+        except:
+            pass
     
     try:
-        if ObjectId.is_valid(grade_id):
-            grade_id = ObjectId(grade_id)
+        grade_object_id = ObjectId(grade_id)
     except:
-        pass
+        return jsonify({"error": "Invalid grade ID"}), 400
     
-    result = db.student_grades.update_one({"_id": grade_id}, {"$set": grade_data})
+    result = db.student_grades.update_one(
+        {"_id": grade_object_id},
+        {"$set": grade_data}
+    )
+    
     if result.matched_count == 0:
-        return jsonify({"error": f"Grade {grade_id} not found"}), 404
+        return jsonify({"error": "Grade not found"}), 404
     
-    updated_grade = db.student_grades.find_one({"_id": grade_id})
+    updated_grade = db.student_grades.find_one({"_id": grade_object_id})
     return jsonify(updated_grade)
 
 @app.route('/api/student-grades/<grade_id>', methods=['DELETE'])
