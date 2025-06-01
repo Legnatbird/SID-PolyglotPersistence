@@ -65,6 +65,12 @@ export default function MyGrades() {
         setLoading(true);
         setError(null);
         
+        console.log('Fetching course data for:', {
+          courseCode: selectedCourse.subject_code,
+          studentCode,
+          semester: selectedSemester
+        });
+        
         const course = await getCourseById(selectedCourse.subject_code);
         setCourseDetails(course);
         
@@ -72,6 +78,8 @@ export default function MyGrades() {
           selectedCourse.subject_code, 
           selectedSemester
         );
+        
+        console.log('Found evaluation plans:', plans);
         
         if (plans.length === 0) {
           setEvaluationPlan(null);
@@ -83,43 +91,37 @@ export default function MyGrades() {
           new Date(b.updated_at) - new Date(a.updated_at)
         )[0];
         
+        console.log('Using evaluation plan:', latestPlan);
         setEvaluationPlan(latestPlan);
         
+        console.log('Fetching grades for plan:', latestPlan._id, 'student:', studentCode);
         const gradesData = await getStudentGradesByPlan(latestPlan._id, studentCode);
+        console.log('Received grades data:', gradesData);
         
         let gradesArray = [];
-        
-        if (gradesData && Array.isArray(gradesData.grades)) {
+        if (Array.isArray(gradesData)) {
+          gradesArray = gradesData;
+        } else if (gradesData && Array.isArray(gradesData.grades)) {
           gradesArray = gradesData.grades;
-        } else if (Array.isArray(gradesData)) {
-          if (gradesData.length > 0 && gradesData[0].grades) {
-            gradesArray = gradesData[0].grades;
-          } else {
-            gradesArray = gradesData;
-          }
         } else {
-          console.warn('Unexpected grade data format:', gradesData);
+          console.log('No grades found or unexpected format');
           gradesArray = [];
         }
         
+        console.log('Processed grades array:', gradesArray);
         setStudentGrades(gradesArray);
         
         const updates = {};
         latestPlan.activities.forEach(activity => {
           const existingGrade = gradesArray.find(g => g.activity_id === activity._id);
-          
-          if (existingGrade) {
-            updates[activity._id] = existingGrade.grade;
-          } else {
-            updates[activity._id] = '';
-          }
+          updates[activity._id] = existingGrade ? existingGrade.grade : '';
         });
         
         setGradeUpdates(updates);
         
       } catch (err) {
         console.error('Error fetching course data:', err);
-        setError(err.message);
+        setError(`Failed to load course data: ${err.message}`);
       } finally {
         setLoading(false);
       }

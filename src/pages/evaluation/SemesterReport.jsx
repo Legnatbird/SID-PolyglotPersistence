@@ -23,10 +23,8 @@ export default function SemesterReport() {
   const [overallAverage, setOverallAverage] = useState(null);
   const [debugInfo, setDebugInfo] = useState({});
   
-  // Cache for API requests
   const requestCacheRef = useRef({});
-  
-  // Memoized API request function with caching
+
   const cachedRequest = useCallback(async (key, requestFn) => {
     if (requestCacheRef.current[key]) {
       return requestCacheRef.current[key];
@@ -45,7 +43,6 @@ export default function SemesterReport() {
   const handleResetData = useCallback(() => {
     try {
       resetAndReseedDemoData();
-      // Clear cache on data reset
       requestCacheRef.current = {};
       window.location.reload();
     } catch (err) {
@@ -54,19 +51,16 @@ export default function SemesterReport() {
     }
   }, []);
   
-  // Single fetch function to get all course details and evaluation plans at once
   const fetchCourseDetailsAndPlans = useCallback(async (courses, semester) => {
     const courseDetailsMap = {};
     const evaluationPlansMap = {};
     
-    // Create batches of promises to avoid too many concurrent requests
     const batchSize = 5;
     let promises = [];
     
     for (let i = 0; i < courses.length; i++) {
       const course = courses[i];
-      
-      // Add course details promise
+
       const detailsKey = `course-${course.subject_code}`;
       promises.push(
         cachedRequest(detailsKey, () => getCourseById(course.subject_code))
@@ -75,7 +69,6 @@ export default function SemesterReport() {
           })
       );
       
-      // Add evaluation plans promise
       const plansKey = `plans-${course.subject_code}-${semester}`;
       promises.push(
         cachedRequest(plansKey, () => getEvaluationPlansByCourse(course.subject_code, semester))
@@ -89,7 +82,6 @@ export default function SemesterReport() {
           })
       );
       
-      // Process in batches to avoid overwhelming the browser
       if (promises.length >= batchSize || i === courses.length - 1) {
         await Promise.all(promises);
         promises = [];
@@ -99,9 +91,7 @@ export default function SemesterReport() {
     return { courseDetailsMap, evaluationPlansMap };
   }, [cachedRequest]);
   
-  // Process grades with evaluation plans
   const processGrades = useCallback((courses, gradesData, courseDetailsMap, evaluationPlansMap) => {
-    // Initialize course grades objects
     const courseGrades = {};
     courses.forEach(course => {
       courseGrades[course.subject_code] = {
@@ -114,13 +104,10 @@ export default function SemesterReport() {
       };
     });
     
-    // Initialize valid grades counter for average calculation
     let validGradeSum = 0;
     let validGradeCount = 0;
 
-    // Process grade data
     if (Array.isArray(gradesData)) {
-      // Handle individual grade entries
       gradesData.forEach(grade => {
         const courseId = grade.subject_code;
         if (courseGrades[courseId]) {
@@ -128,9 +115,8 @@ export default function SemesterReport() {
         }
       });
       
-      // Calculate grades for each course with its evaluation plan
       Object.values(courseGrades).forEach(course => {
-        if (course.evaluationPlan && course.evaluationPlan.activities) {
+        if (course.evaluationPlan && course.evaluationPlan.activities && course.grades.length > 0) {
           let weightedSum = 0;
           let totalPercentageWithGrades = 0;
           const totalPlanPercentage = course.evaluationPlan.activities.reduce(
@@ -140,10 +126,7 @@ export default function SemesterReport() {
           course.evaluationPlan.activities.forEach(activity => {
             const activityId = activity._id;
             
-            const grade = course.grades[0]?.grades.find(g => {
-              const matches = g.activity_id === activityId;
-              return matches;
-            });
+            const grade = course.grades.find(g => g.activity_id === activityId);
             
             if (grade) {
               const gradeValue = parseFloat(grade.grade);
@@ -156,79 +139,14 @@ export default function SemesterReport() {
             }
           });
           
-          // Set the calculated values
-          course.finalGrade = totalPercentageWithGrades > 0 ? 
-            weightedSum : 0;
+          course.finalGrade = weightedSum;
           
-          // Calculate percentage completion based on the total possible percentage
           course.totalPercentage = totalPlanPercentage > 0 ?
             Math.min((totalPercentageWithGrades / totalPlanPercentage) * 100, 100) : 0;
           
-          // Add to overall average if we have a grade
           if (course.finalGrade > 0) {
             validGradeSum += course.finalGrade;
             validGradeCount++;
-          }
-        }
-      });
-    } else if (typeof gradesData === 'object' && gradesData !== null) {
-      // Handle course-level grade objects - assume it's an array of objects or a single object
-      const gradesArray = Array.isArray(gradesData) ? gradesData : [gradesData];
-      
-      gradesArray.forEach(gradeObj => {
-        const courseId = gradeObj.subject_code;
-        
-        if (courseGrades[courseId]) {
-          // If we have a calculated grade, use it directly
-          if (gradeObj.calculated_grade !== undefined) {
-            const finalGrade = parseFloat(gradeObj.calculated_grade);
-            courseGrades[courseId].finalGrade = finalGrade;
-            
-            // Store the grades for reference
-            if (gradeObj.grades && Array.isArray(gradeObj.grades)) {
-              courseGrades[courseId].grades = gradeObj.grades;
-            }
-            
-            // Use actual completion percentage if available
-            if (courseGrades[courseId].evaluationPlan && courseGrades[courseId].evaluationPlan.activities) {
-              // Calculate completion based on how many activities have grades
-              const totalActivities = courseGrades[courseId].evaluationPlan.activities.length;
-              let gradedActivitiesCount = 0;
-              let totalGradedPercentage = 0;
-              
-              // Count activities with grades
-              if (gradeObj.grades && Array.isArray(gradeObj.grades)) {
-                courseGrades[courseId].evaluationPlan.activities.forEach(activity => {
-                  const activityId = activity._id || activity.id;
-                  const hasGrade = gradeObj.grades.some(g => g.activity_id === activityId);
-                  
-                  if (hasGrade) {
-                    gradedActivitiesCount++;
-                    totalGradedPercentage += parseFloat(activity.percentage || 0);
-                  }
-                });
-                
-                // Calculate percentage based on the percentage value of graded activities
-                const totalPlanPercentage = courseGrades[courseId].evaluationPlan.activities.reduce(
-                  (sum, activity) => sum + parseFloat(activity.percentage || 0), 0
-                );
-                
-                courseGrades[courseId].totalPercentage = totalPlanPercentage > 0 ?
-                  (totalGradedPercentage / totalPlanPercentage) * 100 : 0;
-              } else {
-                // If no detailed grades, estimate from activity count
-                courseGrades[courseId].totalPercentage = totalActivities > 0 ?
-                  (gradedActivitiesCount / totalActivities) * 100 : 0;
-              }
-            } else {
-              courseGrades[courseId].totalPercentage = 100; // Default to 100% if no evaluation plan
-            }
-            
-            // Add to valid grades for average calculation
-            if (!isNaN(finalGrade)) {
-              validGradeSum += finalGrade;
-              validGradeCount++;
-            }
           }
         }
       });

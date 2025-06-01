@@ -10,6 +10,7 @@ import useAuthStore from './store/authStore';
 
 import EvaluationPlans from './pages/evaluation/EvaluationPlans';
 import EvaluationPlanDetail from './pages/evaluation/EvaluationPlanDetail';
+import EvaluationPlanForm from './pages/evaluation/EvaluationPlanForm';
 import MyGrades from './pages/evaluation/MyGrades';
 import SemesterReport from './pages/evaluation/SemesterReport';
 
@@ -39,6 +40,12 @@ function App() {
         <Route path="/evaluation-plans" element={
           <ProtectedRoute>
             <EvaluationPlans />
+          </ProtectedRoute>
+        } />
+        
+        <Route path="/evaluation-plans/new" element={
+          <ProtectedRoute>
+            <EvaluationPlanForm />
           </ProtectedRoute>
         } />
         

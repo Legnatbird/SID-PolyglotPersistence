@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-const API_BASE_URL = import.meta.env.VITE_FLASK_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_FLASK_API_URL || 'http://localhost:8000/api';
 
 const apiRequest = async (endpoint, options = {}) => {
   try {
@@ -160,8 +160,9 @@ export const getContractTypes = async () => {
 
 export const getCourses = async (query = {}) => {
   const queryParams = new URLSearchParams();
-  if (query.title) queryParams.append('title', query.title);
-  if (query.code) queryParams.append('code', query.code);
+  Object.entries(query).forEach(([key, value]) => {
+    if (value) queryParams.append(key, value);
+  });
   
   const endpoint = `/courses${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
   return await apiRequest(endpoint);

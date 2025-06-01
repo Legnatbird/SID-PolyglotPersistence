@@ -189,11 +189,11 @@ export default function EvaluationPlanDetail() {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>{course?.title || 'Course'} Evaluation Plan</h1>
+        <h1>{course?.title || plan?.subject_name || 'Course'} Evaluation Plan</h1>
         <div className="breadcrumbs">
           <span onClick={() => navigate('/')}>Dashboard</span> {'>'}
           <span onClick={() => navigate('/evaluation-plans')}>Evaluation Plans</span> {'>'}
-          <span className="current">{course?.title || 'Plan Details'}</span>
+          <span className="current">{course?.title || plan?.subject_name || 'Plan Details'}</span>
         </div>
       </div>
       
@@ -231,7 +231,7 @@ export default function EvaluationPlanDetail() {
         
         <div className="detail-item">
           <span className="detail-label">Course:</span>
-          <span className="detail-value">{course?.subject_name || 'Unknown Course'}</span>
+          <span className="detail-value">{course?.title || plan?.subject_name || 'Unknown Course'}</span>
         </div>
         
         <div className="detail-item">
